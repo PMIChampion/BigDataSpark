@@ -85,3 +85,69 @@
 7. Код Apache Spark трансформации данных из снежинки/звезды в отчеты в Neo4j.
 8. Код Apache Spark трансформации данных из снежинки/звезды в отчеты в MongoDB.
 9. Код Apache Spark трансформации данных из снежинки/звезды в отчеты в Valkey.
+
+## Реализация обязательной части
+
+В этом репозитории реализована обязательная часть лабораторной:
+- PostgreSQL c загрузкой 10 CSV-файлов в таблицу `mock_data`;
+- Apache Spark для ETL из сырой таблицы в модель `star` в PostgreSQL;
+- ClickHouse для хранения 6 аналитических витрин.
+
+Структура решения:
+- [docker-compose.yml](./docker-compose.yml) поднимает PostgreSQL, ClickHouse и Spark.
+- [sql/postgres/00_create_mock_data.sql](./sql/postgres/00_create_mock_data.sql) создаёт сырую таблицу `mock_data`.
+- [sql/postgres/01_load_mock_data.sql](./sql/postgres/01_load_mock_data.sql) загружает все 10 CSV-файлов в PostgreSQL.
+- [sql/postgres/02_create_star_schema.sql](./sql/postgres/02_create_star_schema.sql) создаёт `star`-схему.
+- [sql/clickhouse/00_init.sql](./sql/clickhouse/00_init.sql) создаёт базу `reports` в ClickHouse.
+- [spark/jobs/raw_to_star.py](./spark/jobs/raw_to_star.py) переносит данные из `mock_data` в `star`-схему PostgreSQL.
+- [spark/jobs/star_to_clickhouse_reports.py](./spark/jobs/star_to_clickhouse_reports.py) строит 6 витрин и загружает их в ClickHouse.
+- [scripts/run_raw_to_star.sh](./scripts/run_raw_to_star.sh) и [scripts/run_clickhouse_reports.sh](./scripts/run_clickhouse_reports.sh) запускают Spark job.
+
+## Как запускать
+
+1. Поднять сервисы:
+
+```bash
+docker compose up -d --build
+```
+
+2. Дождаться инициализации PostgreSQL и ClickHouse.
+
+3. Выполнить ETL из сырой таблицы в `star`-схему:
+
+```bash
+bash scripts/run_raw_to_star.sh
+```
+
+4. Построить витрины и загрузить их в ClickHouse:
+
+```bash
+bash scripts/run_clickhouse_reports.sh
+```
+
+## Подключение к сервисам
+
+PostgreSQL:
+- host: `localhost`
+- port: `5434`
+- database: `bigdataspark`
+- user: `postgres`
+- password: `postgres`
+
+ClickHouse:
+- host: `localhost`
+- http port: `8124`
+- native port: `9001`
+- database: `reports`
+- user: `default`
+- password: `clickhouse`
+
+## Какие витрины создаются в ClickHouse
+
+После выполнения второй Spark job в ClickHouse появляются таблицы:
+- `reports.product_sales_report`
+- `reports.customer_sales_report`
+- `reports.time_sales_report`
+- `reports.store_sales_report`
+- `reports.supplier_sales_report`
+- `reports.product_quality_report`

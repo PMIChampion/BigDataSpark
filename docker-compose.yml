@@ -1,0 +1,59 @@
+services:
+  postgres:
+    image: postgres:16
+    container_name: bigdataspark-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: bigdataspark
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    ports:
+      - "5434:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/postgres:/docker-entrypoint-initdb.d
+      - "./исходные данные:/data:ro"
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.8
+    container_name: bigdataspark-clickhouse
+    restart: unless-stopped
+    environment:
+      CLICKHOUSE_DB: reports
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: "1"
+    ports:
+      - "8124:8123"
+      - "9001:9000"
+    volumes:
+      - clickhouse_data:/var/lib/clickhouse
+      - ./sql/clickhouse:/docker-entrypoint-initdb.d
+
+  spark:
+    build:
+      context: ./spark
+    container_name: bigdataspark-spark
+    restart: unless-stopped
+    depends_on:
+      - postgres
+      - clickhouse
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: bigdataspark
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      CLICKHOUSE_HOST: clickhouse
+      CLICKHOUSE_PORT: "8123"
+      CLICKHOUSE_DB: reports
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: clickhouse
+    volumes:
+      - ./spark/jobs:/opt/app/jobs
+    working_dir: /opt/app
+    command: ["sleep", "infinity"]
+
+volumes:
+  postgres_data:
+  clickhouse_data:
