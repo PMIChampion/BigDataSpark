@@ -11,7 +11,7 @@ from common import (
 
 
 spark = (
-    SparkSession.builder.appName("snowflake-to-clickhouse-reports")
+    SparkSession.builder.appName("star-to-clickhouse-reports")
     .config("spark.sql.session.timeZone", "UTC")
     .getOrCreate()
 )
@@ -22,111 +22,46 @@ dim_store = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_store", properties=POSTGRES_
 dim_supplier = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_supplier", properties=POSTGRES_PROPERTIES)
 dim_product = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_product", properties=POSTGRES_PROPERTIES)
 dim_date = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_date", properties=POSTGRES_PROPERTIES)
-dim_month = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_month", properties=POSTGRES_PROPERTIES)
-dim_quarter = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_quarter", properties=POSTGRES_PROPERTIES)
-dim_year = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_year", properties=POSTGRES_PROPERTIES)
-dim_country = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_country", properties=POSTGRES_PROPERTIES)
-dim_city = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_city", properties=POSTGRES_PROPERTIES)
-dim_address = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_address", properties=POSTGRES_PROPERTIES)
-dim_customer_pet = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_customer_pet", properties=POSTGRES_PROPERTIES)
-dim_pet_type = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_pet_type", properties=POSTGRES_PROPERTIES)
-dim_pet_breed = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_pet_breed", properties=POSTGRES_PROPERTIES)
-dim_pet_category = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_pet_category", properties=POSTGRES_PROPERTIES)
-dim_product_category = spark.read.jdbc(POSTGRES_JDBC_URL, "dim_product_category", properties=POSTGRES_PROPERTIES)
 
-customer_country = dim_country.select(F.col("country_id").alias("customer_country_id"), F.col("country_name").alias("customer_country"))
-store_country = dim_country.select(F.col("country_id").alias("store_country_id"), F.col("country_name").alias("store_country"))
-supplier_country = dim_country.select(F.col("country_id").alias("supplier_country_id"), F.col("country_name").alias("supplier_country"))
-
-customer_pet_dim = (
-    dim_customer_pet.join(dim_pet_type, "pet_type_id")
-    .join(dim_pet_breed, "pet_breed_id")
-    .join(dim_pet_category, "pet_category_id")
-    .select(
-        "customer_pet_id",
-        "pet_name",
-        "pet_type_name",
-        "pet_breed_name",
-        F.col("pet_category_name").alias("customer_pet_category"),
-    )
+customer_dim = dim_customer.select(
+    "customer_id",
+    F.col("first_name").alias("customer_first_name"),
+    F.col("last_name").alias("customer_last_name"),
+    F.col("email").alias("customer_email"),
+    F.col("country").alias("customer_country"),
 )
-
-customer_dim = (
-    dim_customer.join(customer_country, dim_customer.country_id == customer_country.customer_country_id, "left")
-    .join(customer_pet_dim, "customer_pet_id", "left")
-    .select(
-        "customer_id",
-        F.col("first_name").alias("customer_first_name"),
-        F.col("last_name").alias("customer_last_name"),
-        F.col("email").alias("customer_email"),
-        "customer_country",
-        "pet_name",
-        "pet_type_name",
-        "pet_breed_name",
-        "customer_pet_category",
-    )
+store_dim = dim_store.select(
+    "store_id",
+    "store_name",
+    "city",
+    F.col("country").alias("store_country"),
 )
-
-store_dim = (
-    dim_store.join(dim_address, "address_id", "left")
-    .join(dim_city, "city_id", "left")
-    .join(store_country, dim_city.country_id == store_country.store_country_id, "left")
-    .select(
-        "store_id",
-        "store_name",
-        F.col("city_name").alias("city"),
-        "store_country",
-        F.col("address_line").alias("store_address"),
-    )
+supplier_dim = dim_supplier.select(
+    "supplier_id",
+    "supplier_name",
+    F.col("country").alias("supplier_country"),
 )
-
-supplier_dim = (
-    dim_supplier.join(dim_address, "address_id", "left")
-    .join(dim_city, "city_id", "left")
-    .join(supplier_country, dim_city.country_id == supplier_country.supplier_country_id, "left")
-    .select(
-        "supplier_id",
-        "supplier_name",
-        "supplier_country",
-        F.col("city_name").alias("supplier_city"),
-    )
+product_dim = dim_product.select(
+    "product_id",
+    "product_name",
+    "product_category",
+    "price",
+    "rating",
+    "reviews_count",
 )
-
-product_dim = (
-    dim_product.join(dim_product_category, "product_category_id", "left")
-    .join(dim_pet_category, "pet_category_id", "left")
-    .select(
-        "product_id",
-        "supplier_id",
-        "product_name",
-        F.col("product_category_name").alias("product_category"),
-        F.col("pet_category_name").alias("pet_category"),
-        F.col("current_price").alias("price"),
-        "rating",
-        "reviews_count",
-    )
-)
-
-date_dim = (
-    dim_date.join(dim_month, "month_id", "left")
-    .join(dim_quarter, "quarter_id", "left")
-    .join(dim_year, "year_id", "left")
-    .select(
-        F.col("date_id").alias("sale_date_id"),
-        "year_number",
-        "quarter_number",
-        "month_number",
-        "month_name",
-        "full_date",
-    )
+date_dim = dim_date.select(
+    F.col("date_id").alias("sale_date_id"),
+    "year_number",
+    "quarter_number",
+    "month_number",
+    "month_name",
 )
 
 sales = (
     fact.join(customer_dim, "customer_id")
     .join(store_dim, "store_id")
+    .join(supplier_dim, "supplier_id")
     .join(product_dim, "product_id")
-    .join(supplier_dim, product_dim.supplier_id == supplier_dim.supplier_id, "inner")
-    .drop(supplier_dim.supplier_id)
     .join(date_dim, "sale_date_id")
 )
 
@@ -139,7 +74,7 @@ quality_asc_window = Window.orderBy(F.asc("rating"), F.desc("reviews_count"))
 time_window = Window.orderBy("year_number", "month_number")
 
 country_customer_distribution = (
-    customer_dim.groupBy("customer_country")
+    dim_customer.groupBy(F.col("country").alias("customer_country"))
     .agg(F.count("*").alias("customers_in_country"))
 )
 
@@ -224,9 +159,8 @@ quality_base = (
     )
 )
 
-correlation_value = quality_base.select(
-    F.corr("rating", "total_quantity_sold").alias("rating_sales_correlation")
-).first()["rating_sales_correlation"]
+rating_sales_corr = quality_base.select(F.corr("rating", "total_quantity_sold").alias("rating_sales_correlation")).first()
+correlation_value = rating_sales_corr["rating_sales_correlation"]
 
 product_quality_report = (
     quality_base.withColumn("highest_rating_rank", F.dense_rank().over(quality_desc_window))
