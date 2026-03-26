@@ -90,17 +90,17 @@
 
 В этом репозитории реализована обязательная часть лабораторной:
 - PostgreSQL c загрузкой 10 CSV-файлов в таблицу `mock_data`;
-- Apache Spark для ETL из сырой таблицы в модель `star` в PostgreSQL;
+- Apache Spark для ETL из сырой таблицы в полную модель `snowflake` в PostgreSQL, аналогичную лабораторной №1;
 - ClickHouse для хранения 6 аналитических витрин.
 
 Структура решения:
 - [docker-compose.yml](./docker-compose.yml) поднимает PostgreSQL, ClickHouse и Spark.
 - [sql/postgres/00_create_mock_data.sql](./sql/postgres/00_create_mock_data.sql) создаёт сырую таблицу `mock_data`.
 - [sql/postgres/01_load_mock_data.sql](./sql/postgres/01_load_mock_data.sql) загружает все 10 CSV-файлов в PostgreSQL.
-- [sql/postgres/02_create_star_schema.sql](./sql/postgres/02_create_star_schema.sql) создаёт `star`-схему.
+- [sql/postgres/02_create_star_schema.sql](./sql/postgres/02_create_star_schema.sql) создаёт полную `snowflake`-схему.
 - [sql/clickhouse/00_init.sql](./sql/clickhouse/00_init.sql) создаёт базу `reports` в ClickHouse.
-- [spark/jobs/raw_to_star.py](./spark/jobs/raw_to_star.py) переносит данные из `mock_data` в `star`-схему PostgreSQL.
-- [spark/jobs/star_to_clickhouse_reports.py](./spark/jobs/star_to_clickhouse_reports.py) строит 6 витрин и загружает их в ClickHouse.
+- [spark/jobs/raw_to_star.py](./spark/jobs/raw_to_star.py) переносит данные из `mock_data` в `snowflake`-схему PostgreSQL. Имя файла сохранено для совместимости, но логика внутри уже соответствует снежинке.
+- [spark/jobs/star_to_clickhouse_reports.py](./spark/jobs/star_to_clickhouse_reports.py) разворачивает `snowflake`-схему в аналитические выборки и загружает 6 витрин в ClickHouse.
 - [scripts/run_raw_to_star.sh](./scripts/run_raw_to_star.sh) и [scripts/run_clickhouse_reports.sh](./scripts/run_clickhouse_reports.sh) запускают Spark job.
 
 ## Как запускать
@@ -113,7 +113,7 @@ docker compose up -d --build
 
 2. Дождаться инициализации PostgreSQL и ClickHouse.
 
-3. Выполнить ETL из сырой таблицы в `star`-схему:
+3. Выполнить ETL из сырой таблицы в `snowflake`-схему:
 
 ```bash
 bash scripts/run_raw_to_star.sh
@@ -151,3 +151,12 @@ ClickHouse:
 - `reports.store_sales_report`
 - `reports.supplier_sales_report`
 - `reports.product_quality_report`
+
+## Какая снежинка реализована
+
+В PostgreSQL данные раскладываются в ту же полную снежинку, что и в лабораторной №1:
+- география нормализована как `country -> state -> city -> address`, а postal code вынесен в отдельное измерение;
+- календарь нормализован как `year -> quarter -> month -> date`;
+- ветка питомцев нормализована как `pet_category -> pet_type -> pet_breed -> customer_pet`;
+- ветка товара нормализована через отдельные измерения `product_category`, `brand`, `material`, `color`, `size`;
+- таблица `fact_sales` хранит только событие продажи и ссылки на измерения, а поставщик достигается через `dim_product -> dim_supplier`.
